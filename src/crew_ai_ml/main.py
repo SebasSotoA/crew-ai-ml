@@ -5,11 +5,15 @@ import warnings
 from datetime import datetime
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 from crew_ai_ml.crew import CrewAiMl
+
+load_dotenv()
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 
-DEFAULT_DATASET_PATH = "data/titanic.csv"
+DEFAULT_DATASET_PATH = "data/passengers_satisfaction.csv"
 
 
 def _resolve_target_column() -> str:

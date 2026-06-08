@@ -18,9 +18,11 @@ def build_input_schema(
     df_before_encode: pd.DataFrame,
     dummy_groups: dict[str, list[str]],
     final_feature_columns: list[str],
+    excluded_columns: list[str] | None = None,
 ) -> list[dict[str, Any]]:
     """Build inference schema from pre-encode data and post-filter feature columns."""
     final_set = set(final_feature_columns)
+    excluded = set(excluded_columns or [])
     schema: list[dict[str, Any]] = []
 
     for col, all_dummies in dummy_groups.items():
@@ -43,6 +45,8 @@ def build_input_schema(
 
     for col in df_before_encode.columns:
         if col in dummy_groups:
+            continue
+        if col in excluded:
             continue
         if col in final_set and pd.api.types.is_numeric_dtype(df_before_encode[col]):
             schema.append({"name": col, "type": "numeric"})

@@ -6,8 +6,10 @@ from pathlib import Path
 from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+DATA_DIR = PROJECT_ROOT / "data"
 OUTPUT_DIR = PROJECT_ROOT / "output"
 PLOTS_DIR = OUTPUT_DIR / "plots"
+PREP_DIR = OUTPUT_DIR / "prep"
 
 CLEANED_DATA_PATH = OUTPUT_DIR / "cleaned_data.csv"
 TRAIN_DATA_PATH = OUTPUT_DIR / "train.csv"
@@ -25,9 +27,15 @@ MISSING_THRESHOLD = 0.15
 CORR_REDUNDANCY = 0.8
 CORR_IRRELEVANCE = 0.05
 IMBALANCE_RATIO = 0.4
+MIN_PREP_ROWS = 10
+
+PREP_WORKING_PATH = PREP_DIR / "working.csv"
+PREP_PRE_ENCODE_PATH = PREP_DIR / "pre_encode.csv"
+PREP_STATE_PATH = PREP_DIR / "prep_state.json"
+PREP_PROFILE_PATH = PREP_DIR / "profile.json"
 
 DEPLOY_MIN_F1 = 0.70
-DEPLOY_MAX_F1_GAP = 0.10
+DEPLOY_MAX_F1_GAP = 0.05
 
 DEFAULT_PARAM_GRID: dict[str, list[Any]] = {
     "n_estimators": [100, 200],
@@ -42,3 +50,4 @@ def ensure_output_dirs() -> None:
     """Create output and plots directories if they do not exist."""
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     PLOTS_DIR.mkdir(parents=True, exist_ok=True)
+    PREP_DIR.mkdir(parents=True, exist_ok=True)

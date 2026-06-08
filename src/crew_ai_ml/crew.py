@@ -2,10 +2,11 @@ import os
 
 from crewai import Agent, Crew, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
-from crewai.project import CrewBase, agent, crew, task
+from crewai.project import CrewBase, agent, before_kickoff, crew, task
 
+from crew_ai_ml.pipeline.prep_workspace import set_kickoff_inputs, validate_prep_task_output
 from crew_ai_ml.tools import (
-    DataPreparationTool,
+    PREP_TOOLS,
     DataSplitTool,
     DeploymentTool,
     ModelEvaluationTool,
@@ -30,12 +31,21 @@ class CrewAiMl:
     agents: list[BaseAgent]
     tasks: list[Task]
 
+    @before_kickoff
+    def store_kickoff_inputs(self, inputs: dict) -> dict:
+        set_kickoff_inputs(
+            inputs.get("dataset_path"),
+            inputs.get("target_column"),
+        )
+        return inputs
+
     @agent
     def data_preparation_agent(self) -> Agent:
         return Agent(
             config=self.agents_config["data_preparation_agent"],  # type: ignore[index]
-            tools=[DataPreparationTool()],
+            tools=PREP_TOOLS,
             llm=_get_llm(),
+            reasoning=True,
             verbose=True,
         )
 
@@ -79,6 +89,7 @@ class CrewAiMl:
     def data_preparation_task(self) -> Task:
         return Task(
             config=self.tasks_config["data_preparation_task"],  # type: ignore[index]
+            guardrail=validate_prep_task_output,
         )
 
     @task

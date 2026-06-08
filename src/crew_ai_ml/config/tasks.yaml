@@ -1,29 +1,27 @@
 data_preparation_task:
   description: >
-    Execute the full data preparation pipeline for binary classification.
+    Prepare {dataset_path} for binary classification with target {target_column}.
 
-    Dataset: {dataset_path}
-    Target column: {target_column}
+    Workflow:
+    1. Call load_dataset with dataset_path exactly "{dataset_path}" then profile_dataset
+       — do NOT transform before profiling.
+    2. Based on profile evidence, decide and apply tools (skip steps only with
+       documented rationale in your report):
+       - drop_columns for ID-like or useless columns (see profile recommendations)
+       - handle_outliers: iqr_remove, iqr_cap, or skip
+       - impute_missing: median, mode, knn, drop_rows, or skip if no missing
+       - encode_features: one_hot_drop_first or one_hot_full
+       - filter_by_correlation: redundancy, irrelevance, both, or skip
+       - balance_classes: smotenc, smote, undersample, or none
+    3. Call finalize_preparation — MANDATORY last tool.
+    4. Write prep_report.md with sections: Profile Summary, Decisions
+       (issue/choice/rationale), Steps Applied (from prep_state.json).
 
-    Steps (use your DataPreparationTool — do NOT skip the tool call):
-    1. Load and integrate the dataset from {dataset_path}.
-    2. Drop identifier columns that leak no predictive signal.
-    3. Compute descriptive statistics and document data quality findings.
-    4. Detect and handle outliers using IQR-based rules.
-    5. Impute or drop missing values with documented rationale.
-    6. Remove redundant features via correlation analysis and low-variance filters.
-    7. Address class imbalance with SMOTE or SMOTENC when the minority class
-       falls below the configured threshold.
-    8. Encode categoricals (one-hot with drop_first for binary, full dummies
-       for multi-value) and label-encode the target column {target_column}.
-
-    After the tool completes, summarize: rows/columns before and after,
-    imbalance treatment applied, features removed, and paths to
-    output/cleaned_data.csv and output/prep_report.md.
+    Python enforces artifacts; you choose methods.
   expected_output: >
-    A markdown preparation report covering all eight steps, tool execution
-    summary (JSON fields), data quality insights, and confirmed artifact
-    paths: output/cleaned_data.csv and output/prep_report.md.
+    Markdown report with ## Profile Summary, ## Decisions (issue/choice/rationale),
+    ## Steps Applied (tool sequence from output/prep/prep_state.json), and
+    confirmation that output/cleaned_data.csv and output/feature_metadata.json exist.
   agent: data_preparation_agent
   output_file: output/prep_report.md
 
@@ -86,7 +84,7 @@ evaluation_task:
        (output/plots/confusion_matrix.png).
     5. Write output/evaluation_report.md with a ## Verdict section containing
        exactly **DEPLOY** or **DO NOT DEPLOY** plus reasoning against
-       thresholds (test F1 >= 0.70 and train-test F1 gap < 0.10 → DEPLOY).
+       thresholds (test F1 >= 0.70 and train-test F1 gap < 0.05 → DEPLOY).
 
     The verdict gates the deployment stage — be explicit and evidence-based.
   expected_output: >

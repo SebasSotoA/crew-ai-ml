@@ -15,7 +15,7 @@ from crew_ai_ml.pipeline.config import (
     TRAIN_DATA_PATH,
     ensure_output_dirs,
 )
-from crew_ai_ml.pipeline.data_preparation import DataPreparationError, run_data_preparation
+from crew_ai_ml.pipeline.data_preparation import DataPreparationError
 from crew_ai_ml.pipeline.feature_transform import (
     build_input_schema,
     transform_raw_dataframe,
@@ -48,7 +48,6 @@ __all__ = [
     "TRAIN_DATA_PATH",
     "TrainingError",
     "ensure_output_dirs",
-    "run_data_preparation",
     "run_deployment",
     "run_evaluation",
     "run_split",
