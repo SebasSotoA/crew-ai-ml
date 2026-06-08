@@ -1,0 +1,123 @@
+data_preparation_task:
+  description: >
+    Execute the full data preparation pipeline for binary classification.
+
+    Dataset: {dataset_path}
+    Target column: {target_column}
+
+    Steps (use your DataPreparationTool — do NOT skip the tool call):
+    1. Load and integrate the dataset from {dataset_path}.
+    2. Drop identifier columns that leak no predictive signal.
+    3. Compute descriptive statistics and document data quality findings.
+    4. Detect and handle outliers using IQR-based rules.
+    5. Impute or drop missing values with documented rationale.
+    6. Remove redundant features via correlation analysis and low-variance filters.
+    7. Address class imbalance with SMOTE or SMOTENC when the minority class
+       falls below the configured threshold.
+    8. Encode categoricals (one-hot with drop_first for binary, full dummies
+       for multi-value) and label-encode the target column {target_column}.
+
+    After the tool completes, summarize: rows/columns before and after,
+    imbalance treatment applied, features removed, and paths to
+    output/cleaned_data.csv and output/prep_report.md.
+  expected_output: >
+    A markdown preparation report covering all eight steps, tool execution
+    summary (JSON fields), data quality insights, and confirmed artifact
+    paths: output/cleaned_data.csv and output/prep_report.md.
+  agent: data_preparation_agent
+  output_file: output/prep_report.md
+
+split_task:
+  description: >
+    Split the cleaned dataset into stratified train and test sets.
+
+    Target column: {target_column}
+
+    Requirements (use your DataSplitTool — mandatory):
+    1. Read output/cleaned_data.csv produced by data preparation.
+    2. Perform a stratified 70/30 train-test split on {target_column}.
+    3. Preserve class proportions in both partitions.
+    4. Save output/train.csv and output/test.csv.
+    5. Report row counts and class distribution for train and test sets.
+
+    Document reproducibility (random seed) and confirm no data leakage from
+    the preparation stage.
+  expected_output: >
+    A split summary with train/test row counts, per-class distributions,
+    stratification confirmation, and paths to output/train.csv and
+    output/test.csv.
+  agent: split_agent
+
+model_training_task:
+  description: >
+    Train and tune a Random Forest binary classifier on the training set.
+
+    Target column: {target_column}
+
+    Requirements (use your ModelTrainingTool — mandatory):
+    1. Load output/train.csv.
+    2. Train a baseline Random Forest, then run GridSearchCV with stratified
+       internal validation (80/20 from train).
+    3. Default hyperparameter grid: n_estimators [100, 200], max_depth
+       [None, 10, 20], min_samples_leaf [1, 5, 10], criterion [gini, entropy].
+    4. Select the best estimator and persist the pickle bundle to
+       output/model_random_forest.pkl (model, encoders, feature columns).
+    5. Log best params, CV scores, and training duration to output/training_log.md.
+
+    Summarize the winning configuration and model artifact path.
+  expected_output: >
+    A training log describing baseline vs tuned performance, best
+    hyperparameters, cross-validation results, and the path
+    output/model_random_forest.pkl.
+  agent: model_agent
+  output_file: output/training_log.md
+
+evaluation_task:
+  description: >
+    Evaluate the trained model on the held-out test set and issue a verdict.
+
+    Target column: {target_column}
+
+    Requirements (use your ModelEvaluationTool — mandatory):
+    1. Load output/model_random_forest.pkl and output/test.csv.
+    2. Compute accuracy, weighted precision, recall, and F1 on test data.
+    3. Compare train vs test metrics to detect overfitting or underfitting.
+    4. Generate ROC curve (output/plots/roc_curve.png) and confusion matrix
+       (output/plots/confusion_matrix.png).
+    5. Write output/evaluation_report.md with a ## Verdict section containing
+       exactly **DEPLOY** or **DO NOT DEPLOY** plus reasoning against
+       thresholds (test F1 >= 0.70 and train-test F1 gap < 0.10 → DEPLOY).
+
+    The verdict gates the deployment stage — be explicit and evidence-based.
+  expected_output: >
+    An evaluation report with test metrics, train-test comparison, plot paths,
+    and a ## Verdict section with **DEPLOY** or **DO NOT DEPLOY** and
+    supporting reasoning. Artifact: output/evaluation_report.md.
+  agent: evaluation_agent
+  output_file: output/evaluation_report.md
+
+deployment_task:
+  description: >
+    Deploy the model or document rejection based on the evaluation verdict.
+
+    Target column: {target_column}
+
+    Review the evaluation task output and output/evaluation_report.md carefully.
+
+    Requirements (use your DeploymentTool — mandatory):
+    1. Parse the ## Verdict section from the evaluation report.
+    2. If verdict is **DEPLOY**:
+       - Generate a Streamlit app at output/app.py with single-row and batch
+         CSV inference tabs, predict_proba confidence, and sidebar metrics.
+       - Write output/requirements.txt with runtime dependencies.
+    3. If verdict is **DO NOT DEPLOY**:
+       - Write output/failure_report.md explaining why deployment was blocked
+         and recommended remediation steps.
+
+    Summarize which branch executed and list all generated artifact paths.
+  expected_output: >
+    A deployment summary stating DEPLOY or DO NOT DEPLOY branch taken,
+    artifact paths (output/app.py and output/requirements.txt, or
+    output/failure_report.md), and next-step recommendations.
+  agent: deployment_agent
+  output_file: output/deployment_report.md

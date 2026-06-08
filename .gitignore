@@ -1,0 +1,50 @@
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+dist/
+build/
+.venv/
+
+# Testing & coverage
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# IDE & editor
+.cursor/
+.vscode/
+.idea/
+
+# Project artifacts (generated at runtime)
+output/
+*.pkl
+*.joblib
+
+# Datasets (keep sample only; add your own CSVs locally)
+data/*
+!data/README.md
+!data/titanic.csv
+
+# Logs
+*.log
+logs.txt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# CrewAI / vector DB caches
+*.sqlite3
+.chroma/
+db/
+storage/
