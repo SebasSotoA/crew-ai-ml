@@ -6,6 +6,7 @@ from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from crew_ai_ml.pipeline.data_preparation import load_dataset
+from crew_ai_ml.pipeline.prep_workspace import prep_tool_guard
 
 logger = logging.getLogger(__name__)
 
@@ -31,7 +32,8 @@ class LoadDatasetTool(BaseTool):
 
     def _run(self, dataset_path: str, target_column: str) -> str:
         try:
-            result = load_dataset(dataset_path=dataset_path, target_column=target_column)
+            with prep_tool_guard():
+                result = load_dataset(dataset_path=dataset_path, target_column=target_column)
             return json.dumps(result)
         except Exception:
             logger.exception("load_dataset failed")

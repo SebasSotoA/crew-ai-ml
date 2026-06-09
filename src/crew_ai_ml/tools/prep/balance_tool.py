@@ -6,6 +6,7 @@ from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from crew_ai_ml.pipeline.data_preparation import balance_classes
+from crew_ai_ml.pipeline.prep_workspace import prep_tool_guard
 
 logger = logging.getLogger(__name__)
 
@@ -37,11 +38,12 @@ class BalanceClassesTool(BaseTool):
         imbalance_ratio: float | None = None,
     ) -> str:
         try:
-            result = balance_classes(
-                method=method,
-                target_column=target_column,
-                imbalance_ratio=imbalance_ratio,
-            )
+            with prep_tool_guard():
+                result = balance_classes(
+                    method=method,
+                    target_column=target_column,
+                    imbalance_ratio=imbalance_ratio,
+                )
             return json.dumps(result, default=str)
         except Exception:
             logger.exception("balance_classes failed")

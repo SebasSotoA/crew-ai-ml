@@ -6,6 +6,7 @@ from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from crew_ai_ml.pipeline.data_preparation import impute_missing
+from crew_ai_ml.pipeline.prep_workspace import prep_tool_guard
 
 logger = logging.getLogger(__name__)
 
@@ -36,11 +37,12 @@ class ImputeMissingTool(BaseTool):
         columns: list[str] | None = None,
     ) -> str:
         try:
-            result = impute_missing(
-                strategy=strategy,
-                target_column=target_column,
-                columns=columns,
-            )
+            with prep_tool_guard():
+                result = impute_missing(
+                    strategy=strategy,
+                    target_column=target_column,
+                    columns=columns,
+                )
             return json.dumps(result)
         except Exception:
             logger.exception("impute_missing failed")

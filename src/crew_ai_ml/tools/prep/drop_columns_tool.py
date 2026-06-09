@@ -6,6 +6,7 @@ from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from crew_ai_ml.pipeline.data_preparation import drop_columns
+from crew_ai_ml.pipeline.prep_workspace import prep_tool_guard
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +24,8 @@ class DropColumnsTool(BaseTool):
 
     def _run(self, columns: list[str], reason: str, target_column: str) -> str:
         try:
-            result = drop_columns(columns=columns, reason=reason, target_column=target_column)
+            with prep_tool_guard():
+                result = drop_columns(columns=columns, reason=reason, target_column=target_column)
             return json.dumps(result)
         except Exception:
             logger.exception("drop_columns failed")

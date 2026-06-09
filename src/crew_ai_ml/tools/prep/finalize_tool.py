@@ -6,6 +6,7 @@ from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from crew_ai_ml.pipeline.data_preparation import finalize_preparation
+from crew_ai_ml.pipeline.prep_workspace import prep_tool_guard
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ class FinalizePreparationTool(BaseTool):
 
     def _run(self, target_column: str) -> str:
         try:
-            result = finalize_preparation(target_column=target_column)
+            with prep_tool_guard():
+                result = finalize_preparation(target_column=target_column)
             return json.dumps(result, default=str)
         except Exception:
             logger.exception("finalize_preparation failed")

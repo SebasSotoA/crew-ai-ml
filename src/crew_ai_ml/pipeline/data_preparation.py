@@ -31,6 +31,7 @@ from crew_ai_ml.pipeline.config import (
 )
 from crew_ai_ml.pipeline.feature_transform import build_input_schema
 from crew_ai_ml.pipeline import prep_workspace as ws
+from crew_ai_ml.pipeline.validators import feature_null_report, null_report_message
 
 ID_COLUMN_PATTERNS = (
     r"\bid\b",
@@ -588,7 +589,9 @@ def impute_missing(
             data = data.dropna(subset=[target_column])
             actions.append("dropped rows with missing target")
 
-    ws.write_working(data.reset_index(drop=True))
+    data = data.reset_index(drop=True)
+    ws.write_working(data)
+    ws.verify_working_write(len(data))
     ws.log_step(
         "impute_missing",
         {"strategy": strategy, "columns": columns},
@@ -599,17 +602,144 @@ def impute_missing(
     return {"strategy": strategy, "actions": actions, "rows": len(data)}
 
 
+def _expected_rows_from_state(state: dict[str, Any]) -> int | None:
+    """Return rows_after from the last encode/filter/balance step."""
+    for step in reversed(state.get("steps_applied", [])):
+        if step.get("tool") in {"balance_classes", "filter_by_correlation", "encode_features"}:
+            return int(step["rows_after"])
+    return None
+
+
+def _expected_working_rows(state: dict[str, Any]) -> int | None:
+    """Return rows_after from the last raw-stage prep step before encoding."""
+    for step in reversed(state.get("steps_applied", [])):
+        if step.get("tool") in {
+            "impute_missing",
+            "handle_outliers",
+            "drop_columns",
+            "load_dataset",
+        }:
+            return int(step["rows_after"])
+    return None
+
+
+def _coerce_numeric_feature_columns(
+    df: pd.DataFrame,
+    target_column: str,
+) -> pd.DataFrame:
+    """Coerce object columns that are fully numeric-parseable; fail on mixed-type corruption."""
+    data = df.copy()
+    corrupt_cols: list[str] = []
+
+    for col in data.columns:
+        if col == target_column:
+            continue
+        if pd.api.types.is_numeric_dtype(data[col]):
+            continue
+
+        coerced = pd.to_numeric(data[col], errors="coerce")
+        non_null = data[col].notna()
+        if not non_null.any():
+            continue
+
+        numeric_mask = non_null & coerced.notna()
+        non_numeric_mask = non_null & coerced.isna()
+
+        if numeric_mask.any() and non_numeric_mask.any():
+            corrupt_cols.append(col)
+        elif numeric_mask.any():
+            data[col] = coerced
+
+    if corrupt_cols:
+        raise DataPreparationError(
+            f"Mixed numeric and non-numeric values in columns {corrupt_cols}. "
+            "Re-run load_dataset to reset the workspace."
+        )
+    return data
+
+
+def _validate_and_coerce_features(
+    df: pd.DataFrame,
+    target_column: str,
+    expected_rows: int | None = None,
+) -> pd.DataFrame:
+    """Ensure feature columns are numeric and row count matches prior prep steps."""
+    if expected_rows is not None and len(df) != expected_rows:
+        raise DataPreparationError(
+            f"Row count {len(df)} does not match last prep step ({expected_rows}). "
+            "Re-run load_dataset to reset the workspace."
+        )
+
+    data = df.copy()
+    feature_cols = [c for c in data.columns if c != target_column]
+    corrupt_cols: list[str] = []
+
+    for col in feature_cols:
+        if pd.api.types.is_numeric_dtype(data[col]):
+            continue
+        coerced = pd.to_numeric(data[col], errors="coerce")
+        if coerced.isna().any() and data[col].notna().any():
+            corrupt_cols.append(col)
+        else:
+            data[col] = coerced
+
+    if corrupt_cols:
+        raise DataPreparationError(
+            f"Non-numeric values found in feature columns {corrupt_cols}. "
+            "Re-run load_dataset, then encode_features before finalize."
+        )
+
+    non_numeric = [c for c in feature_cols if not pd.api.types.is_numeric_dtype(data[c])]
+    if non_numeric:
+        raise DataPreparationError(
+            f"All features must be numeric before finalize. Non-numeric: {non_numeric}"
+        )
+
+    nulls = feature_null_report(data, target_column)
+    if nulls:
+        raise DataPreparationError(
+            null_report_message(
+                nulls,
+                "Call impute_missing (median/mode/knn/drop_rows) before finalize_preparation.",
+            )
+        )
+
+    return data
+
+
 def encode_features(strategy: str, target_column: str) -> dict[str, Any]:
     """One-hot encode categoricals and switch workspace to encoded stage."""
     target_column = _require_target(target_column)
     _require_raw_stage()
+    state = ws.load_state()
+    try:
+        profile = ws.read_profile()
+        if profile.get("recommendations", {}).get("apply_imputation"):
+            has_impute_step = any(
+                step.get("tool") == "impute_missing"
+                for step in state.get("steps_applied", [])
+            )
+            if not has_impute_step:
+                raise DataPreparationError(
+                    "Profile recommends imputation (apply_imputation=true) but "
+                    "impute_missing was not run. Call impute_missing before encode_features."
+                )
+    except ws.PrepWorkspaceError:
+        pass
     df = ws.read_working()
     rows_before = len(df)
+
+    expected_rows = _expected_working_rows(state)
+    if expected_rows is not None and rows_before != expected_rows:
+        raise DataPreparationError(
+            f"working.csv has {rows_before} rows but last prep step produced "
+            f"{expected_rows}. Re-run load_dataset to reset the workspace."
+        )
 
     if strategy not in {"one_hot_drop_first", "one_hot_full"}:
         raise DataPreparationError(f"Unknown encoding strategy: {strategy}")
 
-    state = ws.load_state()
+    df = _coerce_numeric_feature_columns(df, target_column)
     exclude = _columns_to_exclude(df, target_column, state)
     cols_to_remove = [c for c in exclude if c in df.columns]
     if cols_to_remove:
@@ -618,7 +748,13 @@ def encode_features(strategy: str, target_column: str) -> dict[str, Any]:
 
     ws.write_pre_encode(df)
     encoded_df, dummy_groups = _one_hot_encode(df, target_column, strategy=strategy)
+    if len(encoded_df) != rows_before:
+        raise DataPreparationError(
+            f"Encoding changed row count from {rows_before} to {len(encoded_df)}."
+        )
+    ws.validate_working_df(encoded_df, target_column, require_numeric_features=True)
     ws.write_working(encoded_df)
+    ws.verify_working_write(len(encoded_df))
 
     state["stage"] = "encoded"
     state["dummy_groups"] = dummy_groups
@@ -721,7 +857,9 @@ def balance_classes(
 
     final_df = final_X.copy()
     final_df[target_column] = label_encoder.inverse_transform(final_y)
+    ws.validate_working_df(final_df, target_column, require_numeric_features=True)
     ws.write_working(final_df)
+    ws.verify_working_write(len(final_df))
 
     state = ws.load_state()
     state["label_classes"] = list(label_encoder.classes_)
@@ -793,6 +931,9 @@ def finalize_preparation(target_column: str) -> dict[str, Any]:
 
     if not input_schema:
         raise DataPreparationError("feature_metadata schema is empty after finalize.")
+
+    expected_rows = _expected_rows_from_state(state)
+    df = _validate_and_coerce_features(df, target_column, expected_rows=expected_rows)
 
     df.to_csv(CLEANED_DATA_PATH, index=False)
     FEATURE_METADATA_PATH.write_text(

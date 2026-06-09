@@ -6,6 +6,7 @@ from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from crew_ai_ml.pipeline.data_preparation import filter_by_correlation
+from crew_ai_ml.pipeline.prep_workspace import prep_tool_guard
 
 logger = logging.getLogger(__name__)
 
@@ -42,12 +43,13 @@ class FilterByCorrelationTool(BaseTool):
         irrelevance_threshold: float | None = None,
     ) -> str:
         try:
-            result = filter_by_correlation(
-                mode=mode,
-                target_column=target_column,
-                redundancy_threshold=redundancy_threshold,
-                irrelevance_threshold=irrelevance_threshold,
-            )
+            with prep_tool_guard():
+                result = filter_by_correlation(
+                    mode=mode,
+                    target_column=target_column,
+                    redundancy_threshold=redundancy_threshold,
+                    irrelevance_threshold=irrelevance_threshold,
+                )
             return json.dumps(result)
         except Exception:
             logger.exception("filter_by_correlation failed")

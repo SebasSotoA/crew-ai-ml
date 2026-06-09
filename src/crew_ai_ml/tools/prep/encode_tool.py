@@ -6,6 +6,7 @@ from crewai.tools import BaseTool
 from pydantic import BaseModel, Field
 
 from crew_ai_ml.pipeline.data_preparation import encode_features
+from crew_ai_ml.pipeline.prep_workspace import prep_tool_guard
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,8 @@ class EncodeFeaturesTool(BaseTool):
 
     def _run(self, strategy: str, target_column: str) -> str:
         try:
-            result = encode_features(strategy=strategy, target_column=target_column)
+            with prep_tool_guard():
+                result = encode_features(strategy=strategy, target_column=target_column)
             return json.dumps(result)
         except Exception:
             logger.exception("encode_features failed")
