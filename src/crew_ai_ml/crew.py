@@ -4,13 +4,17 @@ from crewai import Agent, Crew, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
 from crewai.project import CrewBase, agent, before_kickoff, crew, task
 
+from crew_ai_ml.pipeline.deploy_workspace import validate_deployment_task_output
+from crew_ai_ml.pipeline.eval_workspace import validate_evaluation_task_output
 from crew_ai_ml.pipeline.prep_workspace import set_kickoff_inputs, validate_prep_task_output
+from crew_ai_ml.pipeline.split_workspace import validate_split_task_output
+from crew_ai_ml.pipeline.train_workspace import validate_training_task_output
 from crew_ai_ml.tools import (
+    DEPLOY_TOOLS,
+    EVAL_TOOLS,
     PREP_TOOLS,
-    DataSplitTool,
-    DeploymentTool,
-    ModelEvaluationTool,
-    ModelTrainingTool,
+    SPLIT_TOOLS,
+    TRAIN_TOOLS,
 )
 
 
@@ -53,8 +57,9 @@ class CrewAiMl:
     def split_agent(self) -> Agent:
         return Agent(
             config=self.agents_config["split_agent"],  # type: ignore[index]
-            tools=[DataSplitTool()],
+            tools=SPLIT_TOOLS,
             llm=_get_llm(),
+            reasoning=True,
             verbose=True,
         )
 
@@ -62,8 +67,9 @@ class CrewAiMl:
     def model_agent(self) -> Agent:
         return Agent(
             config=self.agents_config["model_agent"],  # type: ignore[index]
-            tools=[ModelTrainingTool()],
+            tools=TRAIN_TOOLS,
             llm=_get_llm(),
+            reasoning=True,
             verbose=True,
         )
 
@@ -71,8 +77,9 @@ class CrewAiMl:
     def evaluation_agent(self) -> Agent:
         return Agent(
             config=self.agents_config["evaluation_agent"],  # type: ignore[index]
-            tools=[ModelEvaluationTool()],
+            tools=EVAL_TOOLS,
             llm=_get_llm(),
+            reasoning=True,
             verbose=True,
         )
 
@@ -80,8 +87,9 @@ class CrewAiMl:
     def deployment_agent(self) -> Agent:
         return Agent(
             config=self.agents_config["deployment_agent"],  # type: ignore[index]
-            tools=[DeploymentTool()],
+            tools=DEPLOY_TOOLS,
             llm=_get_llm(),
+            reasoning=True,
             verbose=True,
         )
 
@@ -97,6 +105,7 @@ class CrewAiMl:
         return Task(
             config=self.tasks_config["split_task"],  # type: ignore[index]
             context=[self.data_preparation_task()],
+            guardrail=validate_split_task_output,
         )
 
     @task
@@ -104,6 +113,7 @@ class CrewAiMl:
         return Task(
             config=self.tasks_config["model_training_task"],  # type: ignore[index]
             context=[self.split_task()],
+            guardrail=validate_training_task_output,
         )
 
     @task
@@ -111,6 +121,7 @@ class CrewAiMl:
         return Task(
             config=self.tasks_config["evaluation_task"],  # type: ignore[index]
             context=[self.model_training_task()],
+            guardrail=validate_evaluation_task_output,
         )
 
     @task
@@ -118,6 +129,7 @@ class CrewAiMl:
         return Task(
             config=self.tasks_config["deployment_task"],  # type: ignore[index]
             context=[self.evaluation_task()],
+            guardrail=validate_deployment_task_output,
         )
 
     @crew

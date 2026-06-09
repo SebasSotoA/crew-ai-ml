@@ -1,13 +1,13 @@
-from crew_ai_ml.tools.deploy_tool import DeploymentTool
-from crew_ai_ml.tools.evaluate_tool import ModelEvaluationTool
+from crew_ai_ml.tools.deploy import DEPLOY_TOOLS
+from crew_ai_ml.tools.eval import EVAL_TOOLS
 from crew_ai_ml.tools.prep import PREP_TOOLS
-from crew_ai_ml.tools.split_tool import DataSplitTool
-from crew_ai_ml.tools.train_tool import ModelTrainingTool
+from crew_ai_ml.tools.split import SPLIT_TOOLS
+from crew_ai_ml.tools.train import TRAIN_TOOLS
 
 __all__ = [
-    "DataSplitTool",
-    "DeploymentTool",
-    "ModelEvaluationTool",
-    "ModelTrainingTool",
+    "DEPLOY_TOOLS",
+    "EVAL_TOOLS",
     "PREP_TOOLS",
+    "SPLIT_TOOLS",
+    "TRAIN_TOOLS",
 ]

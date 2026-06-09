@@ -2,6 +2,10 @@ data_preparation_task:
   description: >
     Prepare {dataset_path} for binary classification with target {target_column}.
 
+    **CRITICAL:** Call exactly ONE prep tool per turn. Wait for each tool result
+    before calling the next. Never batch drop_columns, impute_missing, and
+    encode_features in the same response.
+
     Workflow:
     1. Call load_dataset with dataset_path exactly "{dataset_path}" then profile_dataset
        — do NOT transform before profiling.
@@ -27,72 +31,100 @@ data_preparation_task:
 
 split_task:
   description: >
-    Split the cleaned dataset into stratified train and test sets.
+    Split the cleaned dataset into train and test sets for binary classification.
 
     Target column: {target_column}
 
-    Requirements (use your DataSplitTool — mandatory):
-    1. Read output/cleaned_data.csv produced by data preparation.
-    2. Perform a stratified 70/30 train-test split on {target_column}.
-    3. Preserve class proportions in both partitions.
-    4. Save output/train.csv and output/test.csv.
-    5. Report row counts and class distribution for train and test sets.
+    Workflow:
+    1. Call validate_cleaned_data then profile_split_data — do NOT split before
+       profiling.
+    2. Based on profile recommendations, choose test_size, stratify, and
+       random_state (document rationale if you deviate from recommendations).
+    3. Call split_train_test → validate_split → finalize_split — finalize_split
+       is MANDATORY last tool.
+    4. Write split_report.md with sections: Profile Summary, Decisions
+       (issue/choice/rationale), Steps Applied (from output/split/split_state.json).
 
-    Document reproducibility (random seed) and confirm no data leakage from
-    the preparation stage.
+    Python enforces artifacts; you choose split parameters.
   expected_output: >
-    A split summary with train/test row counts, per-class distributions,
-    stratification confirmation, and paths to output/train.csv and
-    output/test.csv.
+    Markdown report with ## Profile Summary, ## Decisions (issue/choice/rationale),
+    ## Steps Applied (tool sequence from output/split/split_state.json), and
+    confirmation that output/train.csv and output/test.csv exist.
   agent: split_agent
+  output_file: output/split_report.md
 
 model_training_task:
   description: >
-    Train and tune a Random Forest binary classifier on the training set.
+    Train and tune binary classifiers on the training set.
 
     Target column: {target_column}
 
-    Requirements (use your ModelTrainingTool — mandatory):
-    1. Load output/train.csv.
-    2. Train a baseline Random Forest, then run GridSearchCV with stratified
-       internal validation (80/20 from train).
-    3. Default hyperparameter grid: n_estimators [100, 200], max_depth
-       [None, 10, 20], min_samples_leaf [1, 5, 10], criterion [gini, entropy].
-    4. Select the best estimator and persist the pickle bundle to
-       output/model_random_forest.pkl (model, encoders, feature columns).
-    5. Log best params, CV scores, and training duration to output/training_log.md.
+    Workflow:
+    1. Call validate_train_data then profile_train_data — do NOT train before
+       profiling.
+    2. Call log_training_decision for algorithm choice (and any other major
+       choices). If deviating from profile recommendations.algorithm, rationale
+       is REQUIRED. You may log additional decisions before finalize (e.g.
+       candidate selection).
+    3. Read profile recommendations and algorithm_catalog (tunable param names
+       per algorithm). Based on recommendations, train at least two candidates
+       (e.g. baseline + tuned, or two algorithms).
+    4. train_baseline REQUIRES params_json — a JSON object using param names from
+       algorithm_catalog for the chosen algorithm (include random_state when
+       needed).
+    5. tune_hyperparameters REQUIRES param_grid_json — a JSON grid using
+       algorithm_catalog tunable param names. Optionally pass fixed_params_json
+       for kwargs held constant during search. You may skip tune_hyperparameters
+       when recommendations.tune_recommended is false; train a second baseline
+       or another algorithm instead.
+    6. Call list_training_candidates to compare validation metrics.
+    7. Call finalize_training — MANDATORY last tool (writes output/model.pkl).
+    8. Write training_log.md with sections: Profile Summary, Decisions
+       (issue/choice/rationale), Steps Applied (from output/train/train_state.json),
+       Candidates (metrics table), and Selected Model.
 
-    Summarize the winning configuration and model artifact path.
+    Python enforces artifacts; you choose algorithms, params_json, and grids.
   expected_output: >
-    A training log describing baseline vs tuned performance, best
-    hyperparameters, cross-validation results, and the path
-    output/model_random_forest.pkl.
+    Markdown report with ## Profile Summary, ## Decisions (issue/choice/rationale),
+    ## Steps Applied (tool sequence from output/train/train_state.json),
+    ## Candidates (at least 2 trained), ## Selected Model, and confirmation that
+    output/model.pkl and output/training_log.md exist.
   agent: model_agent
   output_file: output/training_log.md
 
 evaluation_task:
   description: >
-    Evaluate the trained model on the held-out test set and issue a verdict.
+    Evaluate the trained model on held-out test data and issue a deployment verdict.
 
     Target column: {target_column}
 
-    Requirements (use your ModelEvaluationTool — mandatory):
-    1. Load output/model_random_forest.pkl and output/test.csv.
-    2. Compute accuracy, weighted precision, recall, and F1 on test data.
-    3. Compare train vs test metrics to detect overfitting or underfitting.
-    4. Generate ROC curve (output/plots/roc_curve.png) and confusion matrix
-       (output/plots/confusion_matrix.png).
-    5. Write output/evaluation_report.md with a ## Verdict section containing
-       exactly **DEPLOY** or **DO NOT DEPLOY** plus reasoning against
-       thresholds (test F1 >= 0.70 and train-test F1 gap < 0.05 → DEPLOY).
+    Workflow:
+    1. Call validate_eval_inputs then profile_eval_context — do NOT compute
+       metrics before profiling.
+    2. Based on profile recommendations, call compute_eval_metrics with splits
+       ['train', 'test'] and metrics ['accuracy', 'precision_weighted',
+       'recall_weighted', 'f1_weighted']. Document rationale if you deviate.
+    3. Call generate_eval_plots with plots from profile recommendations
+       (typically ['confusion_matrix', 'roc_curve']).
+    4. Call analyze_deploy_signals to review threshold guidance and suggested
+       verdict (test F1 >= 0.70 and train-test F1 gap <= 0.05 → DEPLOY).
+    5. Call issue_deploy_verdict with your agent-owned verdict ('DEPLOY' or
+       'DO NOT DEPLOY') and evidence-based rationale citing metrics and
+       threshold guidance.
+    6. Call finalize_evaluation — MANDATORY last tool.
+    7. Write eval_report.md with sections: Profile Summary, Deploy Signals,
+       Agent Decisions (issue/choice/rationale), Steps Applied (from
+       output/eval/eval_state.json), and ## Verdict.
 
-    The verdict gates the deployment stage — be explicit and evidence-based.
+    Python enforces artifacts; you own the deployment verdict.
   expected_output: >
-    An evaluation report with test metrics, train-test comparison, plot paths,
-    and a ## Verdict section with **DEPLOY** or **DO NOT DEPLOY** and
-    supporting reasoning. Artifact: output/evaluation_report.md.
+    Markdown report with ## Profile Summary, ## Deploy Signals, ## Agent
+    Decisions (issue/choice/rationale), ## Steps Applied (tool sequence from
+    output/eval/eval_state.json), ## Verdict with **DEPLOY** or **DO NOT DEPLOY**
+    and rationale, and confirmation that output/eval_report.md and
+    output/model.pkl evaluation_metrics exist.
   agent: evaluation_agent
-  output_file: output/evaluation_report.md
+  output_file: output/eval_report.md
 
 deployment_task:
   description: >
@@ -100,22 +132,28 @@ deployment_task:
 
     Target column: {target_column}
 
-    Review the evaluation task output and output/evaluation_report.md carefully.
+    Workflow:
+    1. Call validate_deploy_inputs then profile_deploy_context — do NOT
+       configure UI or generate artifacts before profiling.
+    2. Read profile recommendations and evaluation verdict branch:
+       - **DEPLOY** branch: configure_app_ui (customize page_title from
+         recommendations or domain context) → generate_streamlit_app →
+         write_deploy_requirements → finalize_deployment.
+       - **DO NOT DEPLOY** branch: document_deploy_failure →
+         finalize_deployment. Do NOT call configure_app_ui,
+         generate_streamlit_app, or write_deploy_requirements.
+    3. Call finalize_deployment — MANDATORY last tool on both branches.
+    4. Write deployment_report.md with sections: Profile Summary, Branch
+       Decision (issue/choice/rationale), Steps Applied (from
+       output/deploy/deploy_state.json), Artifacts, and Next Steps.
 
-    Requirements (use your DeploymentTool — mandatory):
-    1. Parse the ## Verdict section from the evaluation report.
-    2. If verdict is **DEPLOY**:
-       - Generate a Streamlit app at output/app.py with single-row and batch
-         CSV inference tabs, predict_proba confidence, and sidebar metrics.
-       - Write output/requirements.txt with runtime dependencies.
-    3. If verdict is **DO NOT DEPLOY**:
-       - Write output/failure_report.md explaining why deployment was blocked
-         and recommended remediation steps.
-
-    Summarize which branch executed and list all generated artifact paths.
+    Python enforces branch-specific tools; you choose UI settings on DEPLOY.
   expected_output: >
-    A deployment summary stating DEPLOY or DO NOT DEPLOY branch taken,
-    artifact paths (output/app.py and output/requirements.txt, or
-    output/failure_report.md), and next-step recommendations.
+    Markdown report with ## Profile Summary, ## Branch Decision
+    (issue/choice/rationale), ## Steps Applied (tool sequence from
+    output/deploy/deploy_state.json), ## Artifacts, ## Next Steps, and
+    confirmation that output/deployment_report.md exists plus branch
+    artifacts (output/app.py and output/requirements.txt for DEPLOY, or
+    output/failure_report.md for DO NOT DEPLOY).
   agent: deployment_agent
   output_file: output/deployment_report.md

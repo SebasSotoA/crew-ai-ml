@@ -2,7 +2,6 @@
 
 from crew_ai_ml.pipeline.config import (
     CLEANED_DATA_PATH,
-    DEFAULT_PARAM_GRID,
     DEPLOY_MAX_F1_GAP,
     DEPLOY_MIN_F1,
     EVALUATION_REPORT_PATH,
@@ -21,20 +20,65 @@ from crew_ai_ml.pipeline.feature_transform import (
     transform_raw_dataframe,
     transform_raw_input,
 )
-from crew_ai_ml.pipeline.deploy import DeploymentError, run_deployment
-from crew_ai_ml.pipeline.evaluate import EvaluationError, run_evaluation
-from crew_ai_ml.pipeline.split import SplitError, run_split
-from crew_ai_ml.pipeline.train import TrainingError, run_training
+from crew_ai_ml.pipeline.deploy import (
+    DeploymentError,
+    configure_app_ui,
+    document_deploy_failure,
+    finalize_deployment,
+    generate_streamlit_app,
+    profile_deploy_context,
+    validate_deploy_inputs,
+    write_deploy_requirements,
+)
+from crew_ai_ml.pipeline.evaluate import (
+    EvaluationError,
+    analyze_deploy_signals,
+    compute_eval_metrics,
+    finalize_evaluation,
+    generate_eval_plots,
+    issue_deploy_verdict,
+    profile_eval_context,
+    validate_eval_inputs,
+)
+from crew_ai_ml.pipeline.split import (
+    SplitError,
+    finalize_split,
+    profile_split_data,
+    split_train_test,
+    validate_cleaned_data,
+    validate_split,
+)
+from crew_ai_ml.pipeline.train import (
+    TrainingError,
+    finalize_training,
+    list_training_candidates,
+    log_training_decision,
+    profile_train_data,
+    train_baseline,
+    tune_hyperparameters,
+    validate_train_data,
+)
 
 __all__ = [
     "CLEANED_DATA_PATH",
-    "DEFAULT_PARAM_GRID",
     "DEPLOY_MAX_F1_GAP",
     "DEPLOY_MIN_F1",
     "DataPreparationError",
     "DeploymentError",
+    "configure_app_ui",
+    "document_deploy_failure",
     "EVALUATION_REPORT_PATH",
     "EvaluationError",
+    "analyze_deploy_signals",
+    "compute_eval_metrics",
+    "finalize_deployment",
+    "finalize_evaluation",
+    "generate_eval_plots",
+    "generate_streamlit_app",
+    "issue_deploy_verdict",
+    "profile_deploy_context",
+    "profile_eval_context",
+    "validate_eval_inputs",
     "FEATURE_METADATA_PATH",
     "MODEL_PATH",
     "build_input_schema",
@@ -44,12 +88,22 @@ __all__ = [
     "PLOTS_DIR",
     "PROJECT_ROOT",
     "SplitError",
+    "finalize_split",
+    "finalize_training",
+    "list_training_candidates",
+    "log_training_decision",
+    "profile_split_data",
+    "profile_train_data",
+    "split_train_test",
+    "train_baseline",
+    "tune_hyperparameters",
+    "validate_cleaned_data",
+    "validate_deploy_inputs",
+    "validate_split",
+    "validate_train_data",
     "TEST_DATA_PATH",
     "TRAIN_DATA_PATH",
     "TrainingError",
+    "write_deploy_requirements",
     "ensure_output_dirs",
-    "run_deployment",
-    "run_evaluation",
-    "run_split",
-    "run_training",
 ]
